@@ -1,0 +1,50 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Media;
+
+namespace TradeVault.Desktop;
+
+internal static class ThemeChecks
+{
+    internal static void Preference()
+    {
+        var path=Path.Combine(AppContext.BaseDirectory,"TestData","Theme",Guid.NewGuid().ToString("N"),"ui-settings.json");
+        try
+        {
+            AppTheme.Initialize(path);if(AppTheme.IsDark)throw new InvalidOperationException("A fresh workspace must start light.");
+            AppTheme.Toggle();if(!AppTheme.IsDark)throw new InvalidOperationException("Theme action must switch to dark.");
+            AppTheme.Initialize(path);if(!AppTheme.IsDark)throw new InvalidOperationException("Saved dark choice must survive restart.");
+            AppTheme.Toggle();AppTheme.Initialize(path);if(AppTheme.IsDark)throw new InvalidOperationException("Saved light choice must survive restart.");
+            File.WriteAllText(path,"invalid preference");AppTheme.Initialize(path);
+            if(AppTheme.IsDark)throw new InvalidOperationException("Invalid settings must fall back to light.");
+        }
+        finally{AppTheme.Initialize(null);}
+    }
+    internal static void Contrast()
+    {
+        try
+        {
+            foreach(var dark in new[]{false,true})
+            {
+                AppTheme.SetDark(dark);Flush();
+                foreach(var text in new[]{"#18243B","#52627A","#64748B","#2458D3"})
+                    if(Ratio(((SolidColorBrush)Ui.Color(text)).Color,((SolidColorBrush)Ui.Color("#FFFFFF")).Color)<4.5)throw new InvalidOperationException("Insufficient theme text contrast: "+text);
+                if(dark)foreach(var surface in new[]{"#F4F6FA","#F7F9FC","#EDF1F6","#E8EFFD","#F0F5FF"})
+                    foreach(var text in new[]{"#18243B","#52627A"})
+                        if(Ratio(((SolidColorBrush)Ui.Color(text)).Color,((SolidColorBrush)Ui.Color(surface)).Color)<4.5)throw new InvalidOperationException("Insufficient dark surface contrast: "+surface);
+            }
+            if(Ratio(Colors.White,((SolidColorBrush)AppTheme.AccentFill).Color)<4.5)throw new InvalidOperationException("Primary button contrast failed.");
+        }
+        finally{AppTheme.SetDark(false);}
+    }
+    internal static void Flush()=>System.Windows.Application.Current.Dispatcher.Invoke(()=>{},System.Windows.Threading.DispatcherPriority.ContextIdle);
+    private static double Ratio(Color a,Color b)
+    {
+        static double Linear(byte value){var s=value/255d;return s<=0.04045?s/12.92:Math.Pow((s+0.055)/1.055,2.4);}
+        static double L(Color c)=>0.2126*Linear(c.R)+0.7152*Linear(c.G)+0.0722*Linear(c.B);
+        var x=L(a);var y=L(b);return (Math.Max(x,y)+0.05)/(Math.Min(x,y)+0.05);
+    }
+}
+
+
+
